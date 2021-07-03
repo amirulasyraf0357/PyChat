@@ -18,3 +18,7 @@ IDroom = input("Please enter room ID : ")
 Server.send(str.encode(IDuser))
 time.sleep(0.1)
 Server.send(str.encode(IDroom))
+
+while True:
+    sockListen = [sys.stdin, Server]
+    sockRead, sockWrite, sockError = select.select(sockListen, [], [])
