@@ -51,11 +51,11 @@ class GUI:
 
         self.Window.mainloop()
 
-        def goAhead(self, username, room_id=0):
+    def goAhead(self, username, room_id=0):
         self.name = username
-        self.server.send(str.encode(username))
+        self.server.Enter(str.encode(username))
         time.sleep(0.1)
-        self.server.send(str.encode(room_id))
+        self.server.Enter(str.encode(room_id))
         
         self.login.destroy()
         self.layout()
@@ -105,15 +105,15 @@ class GUI:
         self.entryMsg.place(relwidth = 0.74, 
 							relheight = 0.03, 
 							rely = 0.008, 
-							relx = 0.011) 
+							relx = 0.013) 
         self.entryMsg.focus()
 
         self.buttonMsg = tk.Button(self.labelBottom, 
-								text = "Send", 
-								font = "Helvetica 11 bold", 
+								text = "Enter", 
+								font = "Helvetica 13 bold", 
 								width = 20, 
 								bg = "#ABB2B9", 
-								command = lambda : self.sendButton(self.entryMsg.get())) 
+								command = lambda : self.EnterButton(self.entryMsg.get())) 
         self.buttonMsg.place(relx = 0.77, 
 							rely = 0.008, 
 							relheight = 0.03, 
@@ -133,25 +133,25 @@ class GUI:
         self.fileLocation.place(relwidth = 0.65, 
                                 relheight = 0.03, 
                                 rely = 0.008, 
-                                relx = 0.011) 
+                                relx = 0.013) 
 
-        self.browse = tk.Button(self.labelFile, 
-								text = "Browse", 
-								font = "Helvetica 11 bold", 
+        self.Search = tk.Button(self.labelFile, 
+								text = "Search", 
+								font = "Helvetica 13 bold", 
 								width = 13, 
 								bg = "#ABB2B9", 
-								command = self.browseFile)
-        self.browse.place(relx = 0.67, 
+								command = self.SearchFile)
+        self.Search.place(relx = 0.67, 
 							rely = 0.008, 
 							relheight = 0.03, 
 							relwidth = 0.15) 
 
         self.sengFileBtn = tk.Button(self.labelFile, 
-								text = "Send", 
-								font = "Helvetica 11 bold", 
+								text = "Enter", 
+								font = "Helvetica 13 bold", 
 								width = 13, 
 								bg = "#ABB2B9", 
-								command = self.sendFile)
+								command = self.EnterFile)
         self.sengFileBtn.place(relx = 0.84, 
 							rely = 0.008, 
 							relheight = 0.03, 
@@ -167,11 +167,100 @@ class GUI:
         self.textCons.config(state = tk.DISABLED)
 
 
-    def browseFile(self):
+    def SearchFile(self):
         self.filename = filedialog.askopenfilename(initialdir="/", 
-                                    title="Select a file",
+                                    title="Choose a file",
                                     filetypes = (("Text files", 
                                                 "*.txt*"), 
                                                 ("all files", 
                                                 "*.*")))
         self.fileLocation.configure(text="File Opened: "+ self.filename)
+
+    def EnterFile(self):
+        self.server.Enter("FILE".encode())
+        time.sleep(0.1)
+        self.server.Enter(str("client_" + os.path.basename(self.filename)).encode())
+        time.sleep(0.1)
+        self.server.Enter(str(os.path.getsize(self.filename)).encode())
+        time.sleep(0.1)
+
+        file = open(self.filename, "rb")
+        data = file.read(1024)
+        while data:
+            self.server.Enter(data)
+            data = file.read(1024)
+        self.textCons.config(state=tk.DISABLED)
+        self.textCons.config(state = tk.NORMAL)
+        self.textCons.insert(tk.END, "<You> "
+                                     + str(os.path.basename(self.filename)) 
+                                     + " Sent\n\n")
+        self.textCons.config(state = tk.DISABLED) 
+        self.textCons.see(tk.END)
+
+
+    def EnterButton(self, msg):
+        self.textCons.config(state = tk.DISABLED) 
+        self.msg=msg 
+        self.entryMsg.delete(0, tk.END) 
+        snd= threading.Thread(target = self.EnterMessage) 
+        snd.start() 
+
+
+    def receive(self):
+        while True:
+            try:
+                message = self.server.recv(1024).decode()
+
+                if str(message) == "FILE":
+                    file_name = self.server.recv(1024).decode()
+                    lenOfFile = self.server.recv(1024).decode()
+                    Enter_user = self.server.recv(1024).decode()
+
+                    if os.path.exists(file_name):
+                        os.remove(file_name)
+
+                    total = 0
+                    with open(file_name, 'wb') as file:
+                        while str(total) != lenOfFile:
+                            data = self.server.recv(1024)
+                            total = total + len(data)     
+                            file.write(data)
+                    
+                    self.textCons.config(state=tk.DISABLED)
+                    self.textCons.config(state = tk.NORMAL)
+                    self.textCons.insert(tk.END, "<" + str(Enter_user) + "> " + file_name + " Received\n\n")
+                    self.textCons.config(state = tk.DISABLED) 
+                    self.textCons.see(tk.END)
+
+                else:
+                    self.textCons.config(state=tk.DISABLED)
+                    self.textCons.config(state = tk.NORMAL)
+                    self.textCons.insert(tk.END, 
+                                    message+"\n\n") 
+
+                    self.textCons.config(state = tk.DISABLED) 
+                    self.textCons.see(tk.END)
+
+            except: 
+                print("An error has occured!") 
+                self.server.close() 
+                break
+
+    def EnterMessage(self):
+        self.textCons.config(state=tk.DISABLED) 
+        while True:  
+            self.server.Enter(self.msg.encode())
+            self.textCons.config(state = tk.NORMAL)
+            self.textCons.insert(tk.END, 
+                            "<You> " + self.msg + "\n\n") 
+
+            self.textCons.config(state = tk.DISABLED) 
+            self.textCons.see(tk.END)
+            break
+
+
+
+if __name__ == "__main__":
+    ip_address = "127.0.0.1"
+    port = 12345
+    g = GUI(ip_address, port)
