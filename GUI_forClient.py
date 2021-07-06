@@ -1,3 +1,5 @@
+#Group Project ITT440 - GUI Code
+
 import os
 import sys
 import time
