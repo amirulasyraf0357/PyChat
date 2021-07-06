@@ -1,78 +1,151 @@
-import socket
-import select
-import sys
+#Group Project ITT440 - Client Code
+
 import time
-import os
+import queue
+import socket
+import threading
 
-Server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+class Chat_Client(object):
+    def __init__(self, addr="", port=""):
 
-IPaddr = ""
-PORTaddr = 8888
+        self.addr = addr
+        self.port = port
+        self.username = None
+        self.queue = queue.Queue()
+        self.status = True
+        self.loginStatus = False
+        self.loginBack = None
+        self.registerBack = None
+        self.userlist = []
+        self.usermsg = []
+        self.sysmsg = []
 
-Server.connect((IPaddr, PORTaddr))
-print("Connected To server")
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)          
 
-IDuser = input("Please enter user ID : ")
-IDroom = input("Please enter room ID : ")
-
-Server.send(str.encode(IDuser))
-time.sleep(0.1)
-Server.send(str.encode(IDroom))
-
-while True:
-    sockListen = [sys.stdin, Server]
-    sockRead, sockWrite, sockError = select.select(sockListen, [], [])
-    for socket in read_socket:
-        if socket == Server:
-            message = socket.recv(1024)
-            
-            print(str(message.decode()))
-
-            if str(message.decode()) == "FILE":
-                fileName = socket.recv(1024).decode()
-                fileLen = socket.recv(1024).decode()
-                sendUser = socket.recv(1024).decode()
-
-                if os.path.exists(fileName):
-                    os.remove(fileName)
-
-                print(fileName, fileLen, sendUser)
-
-                total = 0
-                with open(fileName, 'wb') as file:
-                    while str(total) != fileLen:
-                        message = socket.recv(1024)
-                        total = total + len(message)     
-                        file.write(message)
-                print("<" + str(sendUser) + "> " + fileName + " sent")
-                       
+        try:
+            self.s.connect((self.addr, self.port))
+            self.s.settimeout(0.000001)
+        except socket.error as err:
+            if err.errno == 10061:
+                print("Connection with {addr}:{port} refused".format(addr=self.addr, port=self.port))
+                return
             else:
-                print(message.decode())
-
+                raise
         else:
-            message = sys.stdin.readline()
+            print("initial successfully!")
 
-            if str(message) == "FILE\n":
-                fileName = input("Enter the file name : ")
-                Server.send("FILE".encode())
-                time.sleep(0.1)
-                Server.send(str("client_" + fileName).encode())
-                time.sleep(0.1)
-                server.send(str(os.path.getsize(fileName)).encode())
-                time.sleep(0.1)
+    def register(self, name, password):
 
-                file = open(fileName, "rb")
-                message = file.read(1024)
-                while message:
-                    server.send(message)
-                    message = file.read(1024)
-                sys.stdout.write("<You>")
-                sys.stdout.write("File sent successfully\n")
-                sys.stdout.flush()
+        self.s.send(str({"type": "register",
+                                "name": name,
+                                "password": password,
+                                "time": time.time()}).encode())
 
+    def login(self, name, password):
+
+        self.username = name
+        self.s.send(str({"type": "login",
+                                "name": name,
+                                "password": password,
+                                "time": time.time()}).encode())
+
+    def send_Msg(self, msg_send, destname, mtype = "msg", fname = ""):
+
+        a = str({"type": "usermsg",
+                        "mtype": mtype,
+                        "destname": destname,
+                        "fname": fname,
+                        "name": self.username,
+                        "time": time.time(),
+                        "msg": msg_send}).encode()
+        constlen = len(a)
+
+        self.s.send(str({"type": "msglen",
+                                "destname": destname,
+                                "name": self.username,
+                                "len": constlen}).encode())
+        print("send     ")
+        print(str({"type": "msglen",
+                          "destname": destname,
+                          "name": self.username,
+                          "len": constlen}).encode())
+        time.sleep(0.01)
+        self.s.send(a)
+
+    def receive_msg(self):
+
+        while self.status:
+            try:
+                msg_recv = eval(self.s.recv(1024))
+            except socket.timeout:
+                pass
+            except socket.error as err:
+                if err.errno == 10053:
+                    print("Software caused connection abort ")
+                    self.status = False
             else:
-                Server.send(message.encode())
-                sys.stdout.write("<You>")
-                sys.stdout.write(message)
-                sys.stdout.flush()
-Server.close()
+                if msg_recv["type"] == "msglen":
+                    self.queue.put(msg_recv)
+                    print("recv             ")
+                    length = msg_recv["len"]
+                    mlen = 0
+                    while msg_recv["type"] != "usermsg":
+                        try:
+                            msg_recv = "".encode()
+
+                            while mlen < length:
+                                try:
+                                    msg_recv_ = self.s.recv(length)
+                                    msg_recv = msg_recv + msg_recv_
+                                    mlen = mlen + len(msg_recv_)
+                                    msg_recv = eval(msg_recv)
+                                    time.sleep(length * 0.00000001)
+                                except socket.timeout:
+                                    continue
+                                except SyntaxError:
+                                    continue
+                                else:
+                                    break
+                        except socket.timeout:
+                            continue
+                        except socket.error as err:
+                            if err.errno == 10053:
+                                print("Software caused connection abort ")
+                                self.status = False
+                    self.queue.put(msg_recv)
+                    print("recv             ")
+                else:
+                    self.queue.put(msg_recv)
+                    print("recv             ")
+
+    def handle_msg(self):
+
+        while True:
+            msg = self.queue.get()
+            print("handle              ",end='')
+
+            if msg["type"] == "loginBack":
+                self.loginBack = msg
+                if msg["info"] == "loginSucc":
+                    self.userlist = msg["userlist"]
+            elif msg["type"] == "rgtrBack":
+                self.registerBack = msg
+            elif msg["type"] == "usermsg":
+                self.usermsg.append(msg)
+            elif msg["type"] == "sysmsg":
+                self.sysmsg.append(msg)
+
+    def main(self):
+        
+        func1 = threading.Thread(target=self.receive_msg)
+        func2 = threading.Thread(target=self.handle_msg)
+        func1.start()
+        func2.start()
+
+    def __del__(self):
+        self.s.close()
+
+if __name__ == '__main__':
+    client = Chat_Client(addr="192.168.56.101", port=8888)
+    client.main()
+    client.login("0", "0")
