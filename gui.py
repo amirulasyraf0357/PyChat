@@ -6,7 +6,7 @@ import time
 import base64
 import threading
 from PyQt5.QtCore import Qt
-from Client import Chat_Client
+from client import Chat_Client
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 class loginWindow(QtWidgets.QDialog):
