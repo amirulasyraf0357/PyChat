@@ -7,7 +7,7 @@ import sqlite3
 import threading
 
 class Chat_Server(object):
-    def __init__(self, addr="", port=""):
+    def __init__(self, addr="", port=""): #this module responsible for creating socket and handling database
         self.addr = addr
         self.port = port
         self.connections = []
@@ -16,8 +16,10 @@ class Chat_Server(object):
         self.userlist = []
         self.queue = queue.Queue()
 
-        self.dbconn = sqlite3.connect('UserInfo.db')
+        self.dbconn = sqlite3.connect('UserInfo.db') #database name
         self.dbcursor = self.dbconn.cursor()
+        #database attribute
+        #if database file not exits, execute() will create a new ones
         self.dbcursor.execute('''CREATE TABLE IF NOT EXISTS USERINFO
                (USERNAME    VARCHAR(20) PRIMARY KEY     NOT NULL,
                 PASSWORD    VARCHAR(20)                 NOT NULL,
@@ -27,25 +29,25 @@ class Chat_Server(object):
         self.dbcursor.execute("UPDATE USERINFO set STATUS = 0")
         self.dbconn.commit()
 
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #TCP socket
         print("Successfully created socket")
 
         self.s.bind((self.addr, self.port))                               
-        print("Socket bind to "+str(self.port))
+        print("Socket bind to "+str(self.port)) #socket bind
 
-    def portlisten(self):
+    def portlisten(self): #Listen for connections 
         
         self.s.listen(10)
         print("Waiting for chat's client to connect...")
         while True:
-            conn, address = self.s.accept()
+            conn, address = self.s.accept() #socket accept conenction from client
             print("Successfully establish connection to chat's client ")        
             conn.settimeout(0.000001)
             add = address[0] + ":" + str(address[1])
             self.connections.append(conn)       
             self.name[add] = add
 
-    def msg_queue(self):
+    def msg_queue(self): #message queue
 
         while True:
             for c in self.connections:
@@ -70,7 +72,7 @@ class Chat_Server(object):
                         while msg_recv["type"] != "usermsg":
                             try:
                                 msg_recv = "".encode()
-                                while mlen < length:        
+                                while mlen < length:        #this part will mark sure message is coming
                                     try:
                                         msg_recv_ = c.recv(length)
                                         msg_recv = msg_recv + msg_recv_
@@ -92,7 +94,7 @@ class Chat_Server(object):
                                 pass
                         self.queue.put((addr, msg_recv, c))
 
-    def loginMychat(self, msg_recv, addr):
+    def loginPychat(self, msg_recv, addr): #Login to PyChat
 
         Username = msg_recv["name"]
         self.dbcursor.execute("SELECT * from USERINFO where USERNAME = \"{Uname}\"".format(Uname = Username)) 
@@ -124,7 +126,7 @@ class Chat_Server(object):
                        "info": "userlogin",
                        "name": Username,
                        "time": time.time(),
-                       "msg": "Welcome {name} to MyChat~".format(name=Username)}
+                       "msg": "Welcome {name} to PyChat~".format(name=Username)}
 
         for c in self.connections:
             c_addr = c.getpeername()
@@ -135,7 +137,7 @@ class Chat_Server(object):
             elif flag:
                 c.send(str(forward).encode())
 
-    def registerMychat(self, msg_recv, addr):
+    def registerPychat(self, msg_recv, addr): #Register PyChat
 
         Username = msg_recv["name"]
         self.dbcursor.execute("SELECT * from USERINFO where USERNAME=\"{Uname}\"".format(Uname = Username))
@@ -159,7 +161,7 @@ class Chat_Server(object):
             if c_addr == addr:
                 c.send(str(back).encode())
 
-    def remove_connection(self, conn):
+    def remove_connection(self, conn): #The user exits, cut the connection, so the system need to remove it otherwise the user will stay in chat 
 
         try:
             self.connections.remove(conn)
@@ -168,54 +170,54 @@ class Chat_Server(object):
         address = conn.getpeername()
         addr = address[0] + ":" + str(address[1])
         Username = self.name[addr]
-        self.name.pop(addr)   
+        self.name.pop(addr)    #remove user from the list
         if Username in self.userlist:
             self.userlist.remove(Username)
-        dbconn1 = sqlite3.connect('userinfo.db')
-        dbcursor1 = dbconn1.cursor()
+        dbconn1 = sqlite3.connect('userinfo.db') #connect to databse
+        dbcursor1 = dbconn1.cursor()#choose which perimeter to change
         dbcursor1.execute("UPDATE USERINFO set STATUS=0 where USERNAME=\"{Uname}\"".format(Uname=Username))
-        dbconn1.commit()
+        dbconn1.commit() #commit change
         back = {"type": "sysmsg",
                 "info": "userexit",
                 "name": Username,
                 "time": time.time(),
-                "msg": "{name} Exits MyChat~".format(name=Username)}
+                "msg": "{name} Exits PyChat~".format(name=Username)}
         for c in self.connections:
             c.send(str(back).encode())
 
-    def msg_forward(self, msg_forward, addr):
+    def msg_forward(self, msg_forward, addr): #determine where to foward the message whether to private chat or public chat
         address = addr[0] + ":" + str(addr[1])
-        if msg_forward["destname"] == "all":
+        if msg_forward["destname"] == "all": #public chat
             for c in self.connections:
                 print("forward     ")
                 c.send(str(msg_forward).encode())
         else:
-            self.nametoconn[msg_forward["destname"]].send(str(msg_forward).encode())
+            self.nametoconn[msg_forward["destname"]].send(str(msg_forward).encode()) #private chat
             self.nametoconn[msg_forward["name"]].send(str(msg_forward).encode())
             print("forward     ")
 
-    def run(self):
+    def run(self): #threading
 
-        func1 = threading.Thread(target=self.portlisten)
-        func2 = threading.Thread(target=self.msg_queue)
+        func1 = threading.Thread(target=self.portlisten) #threading use for module portliste()
+        func2 = threading.Thread(target=self.msg_queue) #threading use for module msg_queue()
         func1.start()
         func2.start()
         while True:
             if self.queue.empty():
                 continue
-            addr, msg, conn = self.queue.get()
-            if msg["type"] == "login":
-                self.loginMychat(msg, addr)
-            elif msg["type"] in ("usermsg", "msglen"):
+            addr, msg, conn = self.queue.get() #sys message received
+            if msg["type"] == "login": #if string is login
+                self.loginPychat(msg, addr)
+            elif msg["type"] in ("usermsg", "msglen"): #if it a message
                 self.msg_forward(msg, addr)
-            elif msg["type"] == "register":
-                self.registerMychat(msg, addr)
+            elif msg["type"] == "register": #if it a command to register
+                self.registerPychat(msg, addr)
                 
     def __del__(self):
-        self.s.close()
-        self.dbconn.close()
+        self.s.close() #close socket
+        self.dbconn.close() #close database
 
 if __name__ == '__main__':
     server = Chat_Server(addr="192.168.56.101", port=8888)
-    server.run()
+    server.run() #when server start, it will start with run() module
 
