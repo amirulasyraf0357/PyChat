@@ -3,7 +3,7 @@
 import time
 import queue
 import socket
-import threading
+import threading #import time, socket,threading modules
 
 class Chat_Client(object):
     def __init__(self, addr="", port=""):
@@ -20,10 +20,10 @@ class Chat_Client(object):
         self.usermsg = []
         self.sysmsg = []
 
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)          
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)          #using tcp
 
         try:
-            self.s.connect((self.addr, self.port))
+            self.s.connect((self.addr, self.port)) #connect socket
             self.s.settimeout(0.000001)
         except socket.error as err:
             if err.errno == 10061:
@@ -34,14 +34,14 @@ class Chat_Client(object):
         else:
             print("initial successfully!")
 
-    def register(self, name, password):
+    def register(self, name, password): #Register
 
         self.s.send(str({"type": "register",
                                 "name": name,
                                 "password": password,
                                 "time": time.time()}).encode())
 
-    def login(self, name, password):
+    def login(self, name, password): #Login
 
         self.username = name
         self.s.send(str({"type": "login",
@@ -49,7 +49,7 @@ class Chat_Client(object):
                                 "password": password,
                                 "time": time.time()}).encode())
 
-    def send_Msg(self, msg_send, destname, mtype = "msg", fname = ""):
+    def send_Msg(self, msg_send, destname, mtype = "msg", fname = ""): #Send message
 
         a = str({"type": "usermsg",
                         "mtype": mtype,
@@ -72,7 +72,7 @@ class Chat_Client(object):
         time.sleep(0.01)
         self.s.send(a)
 
-    def receive_msg(self):
+    def receive_msg(self): #Receive message
 
         while self.status:
             try:
@@ -118,7 +118,7 @@ class Chat_Client(object):
                     self.queue.put(msg_recv)
                     print("recv             ")
 
-    def handle_msg(self):
+    def handle_msg(self): #Error message handling
 
         while True:
             msg = self.queue.get()
@@ -135,17 +135,17 @@ class Chat_Client(object):
             elif msg["type"] == "sysmsg":
                 self.sysmsg.append(msg)
 
-    def main(self):
+    def main(self): #threading
         
-        func1 = threading.Thread(target=self.receive_msg)
-        func2 = threading.Thread(target=self.handle_msg)
+        func1 = threading.Thread(target=self.receive_msg) #receive_msg() module
+        func2 = threading.Thread(target=self.handle_msg) #handle_msg() module
         func1.start()
         func2.start()
 
     def __del__(self):
-        self.s.close()
+        self.s.close() #close socket connection
 
 if __name__ == '__main__':
     client = Chat_Client(addr="192.168.56.101", port=8888)
-    client.main()
+    client.main() #start main modules
     client.login("0", "0")
